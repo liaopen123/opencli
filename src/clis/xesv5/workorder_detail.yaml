@@ -16,7 +16,7 @@ args:
     default: ""
     description: 可选，客服 admin_id，为空时由后端按登录态推断
 
-columns: [workorder_num, curr_node_name, type_name, description, occurrence_time, create_time, close_time, responsible_name, channel_name, last_remark]
+columns: [workorder_num, curr_node_name, type_name, description, occurrence_time, create_time, close_time, responsible_name, channel_name, attachments, last_remark]
 
 pipeline:
   - navigate: "https://service.xesv5.com/?sourceFrom=service-page"
@@ -51,6 +51,16 @@ pipeline:
           const detailJson = item.detailJson ? JSON.parse(item.detailJson) : {};
           occurrenceTime = detailJson.key_104 != null ? String(detailJson.key_104) : '';
         } catch (e) {}
+        const urls = [];
+        if (item.attachment) urls.push(String(item.attachment).trim());
+        const groups = item.attachmentGroupList || [];
+        for (const g of groups) {
+          const items = g.items || [];
+          for (const it of items) {
+            if (it && it.url) urls.push(String(it.url).trim());
+          }
+        }
+        const attachments = urls.filter(Boolean).join(' ');
         return [{
           workorder_num: item.workorderNum,
           curr_node_name: item.currNodeName,
@@ -61,6 +71,7 @@ pipeline:
           close_time: item.closeTime || '',
           responsible_name: item.responsibleName,
           channel_name: item.channelName || '',
+          attachments,
           last_remark: lastRemark,
         }];
       })()
@@ -75,6 +86,7 @@ pipeline:
       close_time: ${{ item.close_time }}
       responsible_name: ${{ item.responsible_name }}
       channel_name: ${{ item.channel_name }}
+      attachments: ${{ item.attachments }}
       last_remark: ${{ item.last_remark }}
 
   - limit: 1
