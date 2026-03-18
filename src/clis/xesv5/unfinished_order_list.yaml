@@ -1,7 +1,7 @@
-# 学而思服务工单列表（未完成/我的工单）
+# 学而思服务工单列表（未完成工单，queryType=4，按创建时间升序）
 site: xesv5
 name: unfinished_order_list
-description: "获取工单列表（未完成/我的工单，需登录 service.xesv5.com）"
+description: "获取未完成工单列表（需登录 service.xesv5.com）"
 domain: service.xesv5.com
 strategy: cookie
 browser: true
@@ -47,8 +47,8 @@ pipeline:
           scope: 1027,
           queryAdminId: queryAdminId || undefined,
           timeoutSort: false,
-          fieldsSort: [{ field: 'createTime', sort: 'desc' }],
-          queryType: 7,
+          fieldsSort: [{ field: 'createTime', sort: 'asc' }],
+          queryType: 4,
           filterJson: '[]',
           filters: [],
           modelId: 1,
