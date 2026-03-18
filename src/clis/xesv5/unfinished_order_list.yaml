@@ -1,0 +1,89 @@
+# 学而思服务工单列表（未完成/我的工单）
+site: xesv5
+name: unfinished_order_list
+description: "获取工单列表（未完成/我的工单，需登录 service.xesv5.com）"
+domain: service.xesv5.com
+strategy: cookie
+browser: true
+
+args:
+  cur_page:
+    type: int
+    default: 1
+    description: 页码
+  per_page:
+    type: int
+    default: 50
+    description: 每页条数
+  limit:
+    type: int
+    default: 20
+    description: 返回条数上限
+  query_admin_id:
+    type: str
+    default: ""
+    description: 查询的客服 ID，为空时由后端按登录态推断
+
+columns: [workorder_num, curr_node_name, type_name, description, create_time, responsible_name, latest_reply_content]
+
+pipeline:
+  - navigate: "https://service.xesv5.com/?sourceFrom=service-page"
+
+  - evaluate: |
+      (async () => {
+        const curPage = ${{ args.cur_page }};
+        const perPage = ${{ args.per_page }};
+        const queryAdminId = ${{ args.query_admin_id | json }};
+        const token = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('brizoo_token_https='));
+        const tokenValue = token ? decodeURIComponent(token.split('=').slice(1).join('=')).trim() : '';
+        const headers = {
+          'accept': 'application/json, text/plain, */*',
+          'content-type': 'application/json;charset=UTF-8',
+        };
+        if (tokenValue) headers['x-brizoo-token'] = 'bearer ' + tokenValue;
+        const body = {
+          curPage,
+          perPage,
+          scope: 1027,
+          queryAdminId: queryAdminId || undefined,
+          timeoutSort: false,
+          fieldsSort: [{ field: 'createTime', sort: 'desc' }],
+          queryType: 7,
+          filterJson: '[]',
+          filters: [],
+          modelId: 1,
+          tplField: { leftType: 2, renderItem: { key: 'right', rows: 1 }, key: '' },
+          latest_reply_content: { left: 'latest_reply_content', operator: null, right: '' },
+        };
+        const res = await fetch('https://service.xesv5.com/api/workorder/workorder/list', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' 请确认已在 service.xesv5.com 登录');
+        const d = await res.json();
+        if (d.stat !== 1) throw new Error(d.msg || '接口返回错误');
+        return (d.data && d.data.lists) ? d.data.lists.map(item => ({
+          workorder_num: item.workorderNum,
+          curr_node_name: item.currNodeName,
+          type_name: item.typeName,
+          description: (item.description || '').substring(0, 120),
+          create_time: item.createTime,
+          close_time: item.closeTime || '',
+          responsible_name: item.responsibleName,
+          latest_reply_content: (item.latestReplyContent || '').substring(0, 80),
+          id: item.id,
+        })) : [];
+      })()
+
+  - map:
+      workorder_num: ${{ item.workorder_num }}
+      curr_node_name: ${{ item.curr_node_name }}
+      type_name: ${{ item.type_name }}
+      description: ${{ item.description }}
+      create_time: ${{ item.create_time }}
+      responsible_name: ${{ item.responsible_name }}
+      latest_reply_content: ${{ item.latest_reply_content }}
+
+  - limit: ${{ args.limit }}

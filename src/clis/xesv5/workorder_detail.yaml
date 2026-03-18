@@ -1,0 +1,73 @@
+# 学而思服务工单详情（根据工单号获取，与页面 #/serviceDetail?workorderNum=xxx 一致）
+site: xesv5
+name: workorder_detail
+description: "根据工单号获取工单详情（需登录 service.xesv5.com）"
+domain: service.xesv5.com
+strategy: cookie
+browser: true
+
+args:
+  id:
+    type: str
+    required: true
+    description: "工单号（如 260316000578），使用 --id 传入"
+  admin_id:
+    type: str
+    default: ""
+    description: 可选，客服 admin_id，为空时由后端按登录态推断
+
+columns: [workorder_num, curr_node_name, type_name, description, create_time, close_time, responsible_name, channel_name, last_remark]
+
+pipeline:
+  - navigate: "https://service.xesv5.com/?sourceFrom=service-page"
+
+  - evaluate: |
+      (async () => {
+        const woNum = String(${{ args.id | json }}).trim();
+        if (!woNum) throw new Error('请传入工单号，例如: opencli xesv5 workorder_detail --id 260316000578');
+        const adminId = String(${{ args.admin_id | json }}).trim();
+        const token = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('brizoo_token_https='));
+        const tokenValue = token ? decodeURIComponent(token.split('=').slice(1).join('=')).trim() : '';
+        const headers = { 'accept': 'application/json, text/plain, */*' };
+        if (tokenValue) headers['x-brizoo-token'] = 'bearer ' + tokenValue;
+        const params = new URLSearchParams({
+          woNum,
+          priv: '2',
+          _t: String(Date.now()),
+        });
+        if (adminId) params.set('admin_id', adminId);
+        const url = 'https://service.xesv5.com/api/workorder/workorder/detail?' + params.toString();
+        const res = await fetch(url, { headers, credentials: 'include' });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' 请确认已在 service.xesv5.com 登录');
+        const d = await res.json();
+        if (d.stat !== 1) throw new Error(d.msg || '接口返回错误');
+        const item = d.data;
+        if (!item) throw new Error('未找到该工单或无权限');
+        const relateLog = item.relateLog || [];
+        const lastLog = relateLog.length ? relateLog[relateLog.length - 1] : null;
+        const lastRemark = lastLog && lastLog.remark && lastLog.remark[0] ? String(lastLog.remark[0]).replace(/\n/g, ' ').substring(0, 120) : '';
+        return [{
+          workorder_num: item.workorderNum,
+          curr_node_name: item.currNodeName,
+          type_name: item.typeName,
+          description: item.description || '',
+          create_time: item.createTime,
+          close_time: item.closeTime || '',
+          responsible_name: item.responsibleName,
+          channel_name: item.channelName || '',
+          last_remark: lastRemark,
+        }];
+      })()
+
+  - map:
+      workorder_num: ${{ item.workorder_num }}
+      curr_node_name: ${{ item.curr_node_name }}
+      type_name: ${{ item.type_name }}
+      description: ${{ item.description }}
+      create_time: ${{ item.create_time }}
+      close_time: ${{ item.close_time }}
+      responsible_name: ${{ item.responsible_name }}
+      channel_name: ${{ item.channel_name }}
+      last_remark: ${{ item.last_remark }}
+
+  - limit: 1
